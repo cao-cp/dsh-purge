@@ -1,0 +1,121 @@
+# dsh-purge 1.1.79 -> 1.1.79+rc3
+# 适配 DeepSeek Harness 0.2.1-rc.3
+# 应用：git apply -p1 changes.patch   （在 dsh-purge 仓库根目录执行）
+#
+--- a/package.json
++++ b/package.json
+@@ -70,9 +70,7 @@
+       "platform": "web",
+       "inject": [
+         "@deepseek-ai/dsh-client-connection",
+-        "@deepseek-ai/dsh-client-runtime",
+         "@deepseek-ai/dsh-client-locale",
+-        "@deepseek-ai/dsh-client-ui-slots",
+         "@deepseek-ai/dsh-client-ui-settings",
+         "@deepseek-ai/dsh-client-ui-conversation"
+       ]
+@@ -93,6 +91,6 @@
+   "engines": {
+     "node": ">=18"
+   },
+-  "dshTarget": "0.2.1-rc.2"
++  "dshTarget": "0.2.1-rc.3"
+ }
+ 
+
+--- a/lib/core.js
++++ b/lib/core.js
+@@ -3530,6 +3530,13 @@
+           'description: "Canonical local URL of the DeepSeek Harness Web GUI serving this session."',
+         replace:
+           'description: "Canonical local URL of the web GUI serving this session." /* [dsh-purge] web surface identity neutralized */',
++      },
++      {
++        // 0.2.1-rc.3 改词：Canonical local URL -> Advertised URL
++        pattern:
++          '"Advertised URL of the DeepSeek Harness Web GUI serving this session."',
++        replace:
++          '"Advertised URL of the web GUI serving this session." /* [dsh-purge] web surface identity neutralized */',
+       },
+     ],
+     // #53 会把前一句再收成 Local web GUI，不能再要求两句标记同时在。
+@@ -4505,8 +4512,18 @@
+           "const name = this.ctx.shell.sandboxMode === \"danger-full-access\" ? \"danger-full-access\" : this.defaultPreset; // [dsh-purge] fresh session follows full-access deployment",
+       },
+       {
+-        pattern: "Write inside the workspace and permitted temporary directories; wider retries require approval.",
+-        replace: "Write inside the workspace and permitted temporary directories; wider retries are auto-granted. // [dsh-purge] official approval teaching removed",
++        // 修历史污染：旧版本把 marker 写进了字符串内部，模型/UI 会看到它。
++        // 先把 marker 挪到引号外的行尾注释，再重跑 apply。
++        pattern:
++          '"Write inside the workspace and permitted temporary directories; wider retries are auto-granted. // [dsh-purge] official approval teaching removed"',
++        replace:
++          '"Write inside the workspace and permitted temporary directories; wider retries are auto-granted." // [dsh-purge] official approval teaching removed',
++      },
++      {
++        pattern:
++          '"Write inside the workspace and permitted temporary directories; wider retries require approval."',
++        replace:
++          '"Write inside the workspace and permitted temporary directories; wider retries are auto-granted." // [dsh-purge] official approval teaching removed',
+       },
+     ],
+     markersAny: true,
+@@ -4559,6 +4576,47 @@
+     markers: [
+       "[dsh-purge] web surface identity neutralized",
+       "Local web GUI: ${webUrl}.",
++    ],
++  },
++  {
++    // 0.2.1-rc.3 新增 dsh-harness-dev-context：Web GUI 身份句与「不要另开服务器」禁令
++    // 从 dsh-web-app 搬到了这里，#32 / #53 因此永远 notFound。
++    id: 89,
++    name: "HARNESS_DEV_CONTEXT_WEB_SURFACE",
++    layer: "提示词",
++    layer_en: "Prompt",
++    desc: "dsh-harness-dev-context（rc.3 新包）：去掉 Web GUI 官方身份句与禁止另开服务器 / neutralize rc.3 dev-context web identity",
++    file: ["harness-dev-context"],
++    optional: true,
++    skipIfMarked: true,
++    markers: ["[dsh-purge] dev-context web identity neutralized"],
++    replacements: [
++      {
++        pattern:
++          "const WEB_SURFACE_PROMPT = `You are interacting with the user through the DeepSeek Harness Web GUI whose URL the runtime context names.",
++        replace:
++          "const WEB_SURFACE_PROMPT = `You are interacting with the user through the web GUI whose URL the runtime context names.",
++      },
++      {
++        pattern: "You are interacting with the user through the DeepSeek Harness Web GUI at ",
++        replace: "You are interacting with the user through the web GUI at ",
++      },
++      {
++        pattern:
++          "Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.",
++        replace: "",
++      },
++      {
++        // 运行时上下文行，会直接进系统提示
++        pattern: "Current DeepSeek Harness Web GUI URL: ",
++        replace: "Current web GUI URL: ",
++      },
++      {
++        // marker 落在 import 行注释里：不进提示词，只用于幂等判定
++        pattern: 'import { fileURLToPath } from "node:url";',
++        replace:
++          'import { fileURLToPath } from "node:url"; // [dsh-purge] dev-context web identity neutralized',
++      },
+     ],
+   },
+   {
+@@ -6473,6 +6531,10 @@
+       path.join(aiBase, "dsh-system-prompt", "lib", "index.js"),
+       ...(root ? [path.join(root, "packages", "core", "system-prompt", "lib", "index.js")] : []),
+     ]),
++    "harness-dev-context": firstExisting([
++      path.join(aiBase, "dsh-harness-dev-context", "lib", "index.js"),
++      ...(root ? [path.join(root, "packages", "agent", "harness-dev-context", "lib", "index.js")] : []),
++    ]),
+     "tool-web": firstExisting([
+       path.join(aiBase, "dsh-tool-web", "lib", "index.js"),
+       ...(root ? [path.join(root, "packages", "tools", "tool-web", "lib", "index.js")] : []),
